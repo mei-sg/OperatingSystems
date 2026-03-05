@@ -7,16 +7,19 @@ CFLAGS = -Wall -Wextra -std=c11
 # Target executable
 TARGET = ACS
 
-# Source files (add more .c files here if needed)
+# Source files
 SRC = main.c
 
-# Default rule
+# Default rule: build the program
 all: $(TARGET)
 
-# Build ACS from source files
+# Rule to create the executable from source files
 $(TARGET): $(SRC)
 	$(CC) $(CFLAGS) $(SRC) -o $(TARGET)
 
 # Clean up generated files
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) *.o
+
+# Phony targets (not real files)
+.PHONY: all clean
