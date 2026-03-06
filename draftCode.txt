@@ -1,3 +1,66 @@
+******************************* FILE PARSING DEBUG
+	/*
+	printf("===================== DEBUG =====================\n");
+	printf("Parsed Customers START:\n");
+
+	for(int i = 0; i < numCustomers; i++) {
+    printf("Customer %d | class %d | arrival %d | service %d\n",
+        customerDetails[i].userID,
+        customerDetails[i].classType,
+        customerDetails[i].arrivalTime,
+        customerDetails[i].serviceTime);
+	}
+	printf("Parsed Customers DONE!\n");
+	*/ 
+
+
+**************** FROM MAIN.C HELPER FUNCTIONS SECTION BUT IS NOW IN QUEUE.C
+
+/*
+
+// Enqueue the customer's index (from customerDetails array) to the BUSINESS/ECONOMY queue
+void enqueue(int queueType, int customerIndex) {
+
+    // Add customer index to queue and increment the length
+    queue[queueType][back[queueType]] = customerIndex;
+    back[queueType] = (back[queueType] + 1) % MAX_CUSTOMERS;
+    queueLength[queueType]++;
+}
+
+
+// Dequeue the customer's index (from customerDetails array) from the BUSINESS/ECONOMY queue
+int dequeue(int queueType) {
+
+	int customerIndex = queue[queueType][front[queueType]];
+
+    // Remove customer index from queue and decrement the length
+    front[queueType] = (front[queueType] + 1) % MAX_CUSTOMERS;
+    queueLength[queueType]--;
+
+	// Return index of dequeued customer
+	return customerIndex;
+}
+
+
+// Clerk chooses which queue to serve next
+int serveQueue() {
+
+	if (queueLength[BUSINESS] > 0) {
+		return BUSINESS;
+	}
+
+	if (queueLength[ECONOMY] > 0) {
+		return ECONOMY;
+	}
+
+	// Both queues are empty
+	return EMPTY;
+}
+
+*/
+
+
+
 
 
 int main() {
