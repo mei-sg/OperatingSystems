@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11
+CFLAGS = -Wall -Wextra -std=c11 -pthread
 
 ACS: main.o queue.o
 	$(CC) $(CFLAGS) main.o queue.o -o ACS
