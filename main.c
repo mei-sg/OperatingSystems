@@ -476,7 +476,7 @@ void calculateAverageTime(int classType, int totalClassCustomers, double classWa
 	}
 
 	if (totalClassCustomers == 0) {
-
+c
 		// Rename class with integer 3 to ANY for readability
 		if (classType == 3) {
 		 className = "ANY";
