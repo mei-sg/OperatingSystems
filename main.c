@@ -476,7 +476,6 @@ void calculateAverageTime(int classType, int totalClassCustomers, double classWa
 	}
 
 	if (totalClassCustomers == 0) {
-c
 		// Rename class with integer 3 to ANY for readability
 		if (classType == 3) {
 		 className = "ANY";
@@ -493,4 +492,5 @@ c
 	printf("Total %s customers: %d.\n", className, totalClassCustomers);
 	printf("Total %s wait time %.2f seconds.\n", className, classWaitTime);
 	printf("Average %s wait time: %.2f seconds.\n", className, averageTime);
+
 }
