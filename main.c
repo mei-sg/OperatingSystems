@@ -15,6 +15,7 @@
 #define BUSINESS 0
 #define ECONOMY 1
 #define NQUEUE 2
+#define ALL 3
 #define NCLERKS 5
 #define MAX_CUSTOMERS 100
 
@@ -26,11 +27,21 @@ struct customerInfo {
 	int arrivalTime;
 };
 
-/* ============================ CUSTOMER DATA ============================ */
+/* ============================ CUSTOMER & CLERK DATA ============================ */
 // Customer list from file parsing
 struct customerInfo *customerDetails; 
 int totalCustomers;
-int customersServed = 0;
+int customersServed;
+
+// BUSINESS customer count
+int totalBusinessCustomers;
+
+// ECONOMY customer count
+int totalEconomyCustomers;
+
+// Flag to signal clerk is done
+int clerkDone[NCLERKS];
+
 
 /* ============================ QUEUE STATE ============================ */
 // Which clerk is currently serving the queue (there could be no clerk serving the queue)
@@ -40,8 +51,19 @@ int queueStatus[NQUEUE];
 int winnerSelected[NQUEUE] = {FALSE};
 
 /* ============================ SIMULATION TIME ============================ */
-struct timeval initTime; // Record the simulation start time
-double overallWaitTime; //Overall waiting time for all customers
+// Record the simulation start time
+struct timeval initTime;
+
+// Overall waiting time for all customers
+double overallWaitTime = 0.0; 
+
+// Overall waiting time for BUSINESS customers
+double businessWaitTime = 0.0; 
+
+// Overall waiting time for ECONOMY customers
+double economyWaitTime = 0.0; 
+
+
 
 /* ============================ THREAD SYNCHRONIZATION ============================ */
 // Mutexes and condition variables for BUSINESS and ECONOMY queues
@@ -66,6 +88,7 @@ int dequeue(int queueType);
 int serveQueue(void);
 double getCurrentTime(void);
 void updateWaitTime(double waitTime);
+void calculateAverageTime(int classType, int totalClassCustomers, double classWaitTime);
 void* customerEntry(void *customerArg);
 void* clerkEntry(void *clerkArg);
 
@@ -79,6 +102,11 @@ int main() {
 	initQueues();
 	for (int i = 0; i < NQUEUE; i++) {
     	queueStatus[i] = EMPTY;
+	}
+
+	// Initialize clerk done flags
+	for (int i = 0; i < NCLERKS; i++) {
+    	clerkDone[i] = FALSE;
 	}
 
 	// Initialize queue mutexes
@@ -125,11 +153,13 @@ int main() {
 
     // Wait for customers
     for (int i = 0; i < totalCustomers; i++) {
+		printf("Waiting for customer thread %d to finish.\n", i);
         pthread_join(customerThread[i], NULL);
     }
 
 	// Wait for clerks
 	for (int i = 0; i < NCLERKS; i++) {
+		printf("Waiting for clerk thread %d to finish.\n", i);
     	pthread_join(clerkThread[i], NULL);
 	}
 
@@ -138,8 +168,11 @@ int main() {
 
 	// destroy mutex & condition variable (optional)
 	
-	// calculate the average waiting time of all customers
-	
+	// calculate the average waiting time of all customers and print message
+	calculateAverageTime(BUSINESS, totalBusinessCustomers, businessWaitTime);
+	calculateAverageTime(ECONOMY, totalEconomyCustomers, economyWaitTime);
+	calculateAverageTime(ALL, totalCustomers, overallWaitTime);
+
 	// Free memory
     free(customerDetails);
 
@@ -178,6 +211,7 @@ struct customerInfo* readFile(char *filename, int *numCustomers){
             &customerList[i].serviceTime
         );
     }
+
 	// Close file and return list
     fclose(fp);
     return customerList;
@@ -199,7 +233,7 @@ double getCurrentTime() {
 
 
 /* Add customer's wait time to overallWaitTime */
-void updateWaitTime(double overallWaitTime) {
+void updateWaitTime(double waitTime) {
 
 	// Lock mutex to update overall wait time
     pthread_mutex_lock(&overallWaitMutex);
@@ -234,31 +268,68 @@ void* customerEntry(void *customerArg) {
 	// Enter the queue
 	pthread_mutex_lock(&queueMutex[queueType]);
 	enqueue(queueType, customerDetailsIndex);
-	printf("CUSTOMER ENTERS QUEUE: Successfully entered the %s queue and length is now %d customers. \n",
+	int currentLength = queueLength[queueType];
+	pthread_mutex_unlock(&queueMutex[queueType]);
+	
+	// Record the time when customer enters the queue
+	double queueEnterTime = getCurrentTime();
+
+	printf("CUSTOMER ENTERS QUEUE: Successfully entered the %s queue and length is now %d customer(s). \n",
 			queueType == BUSINESS ? "BUSINESS" : "ECONOMY",
-			queueLength[queueType]);
-
-	// Wait for clerk signal until customer is selected
-	while (1) {
+			currentLength);
+	
+	// Lock the the queue 
+	pthread_mutex_lock(&queueMutex[queueType]);
+	
+	/* Check the conditions for waiting:
+		1) the queue is empty
+		2) the customer is not at the front of the queue
+		3) a winner has already been selected for the queue
+		4) the queue status is empty (no clerk is currently serving the queue) */
+	while (queueLength[queueType] == 0 ||
+			queue[queueType][front[queueType]] != customerDetailsIndex ||
+			winnerSelected[queueType] == TRUE ||
+			queueStatus[queueType] == EMPTY
+		) {
+		//pthread_mutex_lock(&queueMutex[queueType]);
 		pthread_cond_wait(&queueCond[queueType], &queueMutex[queueType]);
-
-		if (queue[queueType][front[queueType]] == customerDetailsIndex && winnerSelected[queueType] == FALSE) {
-			dequeue(queueType);
-			winnerSelected[queueType] = TRUE;
-			clerkID = queueStatus[queueType];
-			break;
-		}
 	}
+	// Dequeue the customer and record the clerk that is serving the customer
+	dequeue(queueType);
+	winnerSelected[queueType] = TRUE;
+	clerkID = queueStatus[queueType];
+	queueStatus[queueType] = EMPTY;
 
 	pthread_mutex_unlock(&queueMutex[queueType]);
 
+
+
+
+	// Unlock the queue so other customers can enter
+	pthread_mutex_unlock(&queueMutex[queueType]);
+
+	// Record the time when the customer starts service with a clerk
 	double startTime = getCurrentTime();
-	double arrivalTime = customerDetails[customerDetailsIndex].arrivalTime / 10.0;
-	double waitTime = startTime - arrivalTime;
+	double waitTime = startTime - queueEnterTime;
+
+	// Update overall wait time
 	updateWaitTime(waitTime);
 
+	// Update class wait times
+	pthread_mutex_lock(&overallWaitMutex);
+
+	if (queueType == BUSINESS) {
+    	businessWaitTime += waitTime;
+    	totalBusinessCustomers++;
+	} else if (queueType == ECONOMY) {
+    	economyWaitTime += waitTime;
+    	totalEconomyCustomers++;
+	}
+
+	pthread_mutex_unlock(&overallWaitMutex);
+
 	// Clerk starts serving customer
-	printf("CLERK STARTS SERVING CUSTOMER: Clerk number %d is serving customer %d. | Start time: %2f. \n",
+	printf("CLERK STARTS SERVING CUSTOMER: Clerk number %d is serving customer %d. | Start time: %.2f. \n",
 			clerkID, customerID, getCurrentTime());
 
 	// Simulate time it takes to service a customer
@@ -268,18 +339,19 @@ void* customerEntry(void *customerArg) {
     printf("CLERK FINISHES SERVING CUSTOMER: Clerk %d finishes serving customer %d. | End time: %.2f. \n",
             clerkID, customerID, getCurrentTime());
 
+
+	pthread_mutex_lock(&clerkMutex[clerkID]);
+	clerkDone[clerkID] = TRUE;
+	pthread_cond_signal(&clerkCond[clerkID]);
+	pthread_mutex_unlock(&clerkMutex[clerkID]);
+
 	// Increment number of customers served
 	pthread_mutex_lock(&customersServedMutex);
 	customersServed++;
 	pthread_mutex_unlock(&customersServedMutex);
 
-
-    // Notify the clerk that service is finished
-    pthread_mutex_lock(&clerkMutex[clerkID]);
-    pthread_cond_signal(&clerkCond[clerkID]);
-    pthread_mutex_unlock(&clerkMutex[clerkID]);
-
-    pthread_exit(NULL);
+    //pthread_exit(NULL);
+	return NULL;
 }
 
 
@@ -311,7 +383,8 @@ void *clerkEntry(void * clerkArg) {
 			usleep(1000);
 			continue;
 		}
-		// lock the queue
+		/*
+		// Lock the queue
 		pthread_mutex_lock(&queueMutex[serveNow]);
 
 		// Record the status of a queue and indicate that clerk X is now signaling the queue
@@ -319,19 +392,49 @@ void *clerkEntry(void * clerkArg) {
 
 		// Reset winner flag so a new customer can be served
 		winnerSelected[serveNow] = FALSE; 
+	
+		// Reset clerk done flag for the current clerk before waking customer
+		pthread_mutex_lock(&clerkMutex[clerkID]);
+		clerkDone[clerkID] = FALSE;
+		pthread_mutex_unlock(&clerkMutex[clerkID]);
 
 		// Awake waiting customers from the queue
 		pthread_cond_broadcast(&queueCond[serveNow]); 
 		
 		// Unlock the queue so other customers can enter
 		pthread_mutex_unlock(&queueMutex[serveNow]);
+		*/
 
-		// Wait for clerk to finish with customer
+		pthread_mutex_lock(&queueMutex[serveNow]);
+
+		if (queueLength[serveNow] == 0 || queueStatus[serveNow] != EMPTY) {
+    		pthread_mutex_unlock(&queueMutex[serveNow]);
+    		usleep(1000);
+    		continue;
+		}
+
+		queueStatus[serveNow] = clerkID;
+		winnerSelected[serveNow] = FALSE;
+
+		pthread_mutex_lock(&clerkMutex[clerkID]);
+		clerkDone[clerkID] = FALSE;
+		pthread_mutex_unlock(&clerkMutex[clerkID]);
+
+		pthread_cond_broadcast(&queueCond[serveNow]);
+		pthread_mutex_unlock(&queueMutex[serveNow]);
+
+		// Lock the clerk and wait for the signal that the customer has been served
         pthread_mutex_lock(&clerkMutex[clerkID]);
-        pthread_cond_wait(&clerkCond[clerkID], &clerkMutex[clerkID]);
+
+		/* Check the conditions for waiting:
+			1) the clerk is not done serving the customer */
+		while (clerkDone[clerkID] == FALSE) {
+			pthread_cond_wait(&clerkCond[clerkID], &clerkMutex[clerkID]);
+		}
 
 		// Unlock clerk
         pthread_mutex_unlock(&clerkMutex[clerkID]);
+
 	}
 
 	// Exit if all customers have been served
@@ -339,3 +442,35 @@ void *clerkEntry(void * clerkArg) {
 }
 
 
+/* ==================================== WAIT TIME CALCULATIONS ==================================== */
+
+/* Calculate overall wait times for each class */
+void calculateAverageTime(int classType, int totalClassCustomers, double classWaitTime) {
+
+	// Assign class type integer to a string
+	const char *className = "UNKNOWN";
+
+	if (classType == BUSINESS) {
+		className = "BUSINESS";
+	} else if (classType == ECONOMY) {
+		className = "ECONOMY";
+	} else if (classType == ALL) {
+		className = "OVERALL";
+	}
+
+	if (totalClassCustomers == 0) {
+
+		// Rename class with integer 3 to ANY for readability
+		if (classType == 3) {
+		 className = "ANY";
+		}
+		printf("No customers in %s class. Cannot compute average wait time.\n", className);
+		return;
+	}
+
+	// Compute average wait time
+	double averageTime = 0.0;
+	averageTime = classWaitTime / totalClassCustomers;
+
+	printf("Average %s wait time: %.2f seconds.\n", className, averageTime);
+}

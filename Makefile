@@ -1,25 +1,17 @@
-# Compiler
 CC = gcc
-
-# Compiler flags
 CFLAGS = -Wall -Wextra -std=c11
 
-# Target executable
-TARGET = ACS
+ACS: main.o queue.o
+	$(CC) $(CFLAGS) main.o queue.o -o ACS
 
-# Source files
-SRC = main.c
+main.o: main.c queue.h
+	$(CC) $(CFLAGS) -c main.c
 
-# Default rule: build the program
-all: $(TARGET)
+queue.o: queue.c queue.h
+	$(CC) $(CFLAGS) -c queue.c
 
-# Rule to create the executable from source files
-$(TARGET): $(SRC)
-	$(CC) $(CFLAGS) $(SRC) -o $(TARGET)
-
-# Clean up generated files
 clean:
-	rm -f $(TARGET) *.o
+	rm -f ACS *.o
 
 # Phony targets (not real files)
 .PHONY: all clean
