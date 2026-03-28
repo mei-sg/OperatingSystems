@@ -1,55 +1,31 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "fat12.h"
 
-/* 🔧 Examples of helpers (VERY IMPORTANT)
+// #include <stdint.h>
 
-From your assignment + FAT search steps:
 
-File system reading
-readBootSector()
-getOSName()
-getDiskLabel()
-FAT table logic
-getNextCluster(int cluster)
-isFreeCluster()
-Directory parsing
-readDirectory(int cluster)
-parseDirectoryEntry()
-File reading (like your steps doc)
-follow cluster chain (Step 6–7 logic)
-🧱 What goes in each file
-fat12.c (shared logic)
-All helpers
-NO main()
-diskinfo.c
-Calls helpers like:
-readBootSector()
-countFreeSectors()
-disklist.c
-Calls:
-readDirectory()
-recursion for subdirectories
-diskget.c
-Calls:
-search file in root
-follow cluster chain`
-copy data
-diskput.c
-Calls:
-find free clusters
-update FAT
-write directory entry
-🚨 How to decide: helper vs main logic
+#include <stdio.h>
+#include <string.h>
 
-Ask yourself:
+int main() {
+    FILE *fp = fopen("disk.IMA", "rb");
 
-“Will I need this function in more than one program?”
+    if (fp == NULL) {
+        printf("Error opening file\n");
+        return 1;
+    }
 
-YES → goes in fat12.c
-NO → stays in that program’s .c
-🎯 Simple rule (this will save you)
-Type of code	Where it goes
-FAT parsing	fat12.c
-Directory reading	fat12.c
-Cluster traversal	fat12.c
-Printing output format	diskinfo.c etc
-CLI argument handling	each program*/
+    unsigned char buffer[512];
+    fread(buffer, 1, 512, fp);
+
+    char os[9];
+    memcpy(os, buffer + 3, 8);
+    os[8] = '\0';
+
+    printf("OS Name: %s\n", os);
+
+    fclose(fp);
+    return 0;
+}
